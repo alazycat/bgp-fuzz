@@ -1,0 +1,11 @@
+[package]
+name = "bgp-fuzz-driver"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bgp-wire = { path = "../bgp-wire" }
+bgp-fsm = { path = "../bgp-fsm" }
+bgp-fuzz-oracle = { path = "../bgp-fuzz-oracle" }
+chrono = "0.4"
+tokio = { version = "1", features = ["net", "time", "io-util", "macros", "rt-multi-thread"] }
