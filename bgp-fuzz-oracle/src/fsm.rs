@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::{Finding, Oracle, RecvKind, RecvOutcome};
 
 /// Detects RFC 4271 FSM compliance deviations.
@@ -14,6 +16,7 @@ impl Oracle for FsmConsistencyOracle {
         _sent: &[u8],
         outcome: &RecvOutcome,
         fsm_log: &[bgp_fsm::LogEntry],
+        _send_time: Instant,
     ) -> Vec<Finding> {
         let last_sent = match fsm_log.last() {
             Some(entry) => entry,
@@ -58,7 +61,7 @@ mod tests {
         let mut oracle = FsmConsistencyOracle;
         let log = vec![log_entry("Illegal")];
         let outcome = RecvOutcome { bytes: vec![0; 19], kind: RecvKind::Data };
-        let findings = oracle.check(&[], &outcome, &log);
+        let findings = oracle.check(&[], &outcome, &log, Instant::now());
         assert_eq!(findings.len(), 1);
         assert!(matches!(findings[0], Finding::IllegalAccepted { .. }));
     }
@@ -68,7 +71,7 @@ mod tests {
         let mut oracle = FsmConsistencyOracle;
         let log = vec![log_entry("Legal")];
         let outcome = RecvOutcome { bytes: vec![], kind: RecvKind::ConnectionReset };
-        let findings = oracle.check(&[], &outcome, &log);
+        let findings = oracle.check(&[], &outcome, &log, Instant::now());
         assert_eq!(findings.len(), 1);
         assert!(matches!(findings[0], Finding::LegalRejected { .. }));
     }
@@ -78,7 +81,7 @@ mod tests {
         let mut oracle = FsmConsistencyOracle;
         let log = vec![log_entry("Legal")];
         let outcome = RecvOutcome { bytes: vec![0; 19], kind: RecvKind::Data };
-        let findings = oracle.check(&[], &outcome, &log);
+        let findings = oracle.check(&[], &outcome, &log, Instant::now());
         assert!(findings.is_empty());
     }
 }

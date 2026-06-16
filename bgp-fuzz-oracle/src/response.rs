@@ -1,6 +1,5 @@
-use std::time::Instant;
-
 use crate::{Finding, Oracle, RecvKind, RecvOutcome};
+use std::time::Instant;
 
 #[derive(Debug)]
 pub struct ResponseOracle {
@@ -31,6 +30,7 @@ impl Oracle for ResponseOracle {
         _sent: &[u8],
         outcome: &RecvOutcome,
         _fsm_log: &[bgp_fsm::LogEntry],
+        _send_time: Instant,
     ) -> Vec<Finding> {
         self.last_send = Some(Instant::now());
 
@@ -58,7 +58,7 @@ mod tests {
     fn single_timeout_detected() {
         let mut oracle = ResponseOracle::new(1);
         let outcome = RecvOutcome { bytes: vec![], kind: RecvKind::Timeout };
-        let findings = oracle.check(&[], &outcome, &[]);
+        let findings = oracle.check(&[], &outcome, &[], Instant::now());
         assert_eq!(findings.len(), 1);
         assert!(matches!(findings[0], Finding::Timeout { consecutive: 1, timeout_secs: 1 }));
         assert_eq!(oracle.consecutive_timeouts, 1);
@@ -68,9 +68,9 @@ mod tests {
     fn three_timeouts_detected() {
         let mut oracle = ResponseOracle::new(1);
         let timeout = RecvOutcome { bytes: vec![], kind: RecvKind::Timeout };
-        oracle.check(&[], &timeout, &[]);
-        oracle.check(&[], &timeout, &[]);
-        let findings = oracle.check(&[], &timeout, &[]);
+        oracle.check(&[], &timeout, &[], Instant::now());
+        oracle.check(&[], &timeout, &[], Instant::now());
+        let findings = oracle.check(&[], &timeout, &[], Instant::now());
         assert_eq!(findings.len(), 1);
         assert!(matches!(findings[0], Finding::Timeout { consecutive: 3, .. }));
     }
@@ -80,10 +80,10 @@ mod tests {
         let mut oracle = ResponseOracle::new(1);
         let timeout = RecvOutcome { bytes: vec![], kind: RecvKind::Timeout };
         let data = RecvOutcome { bytes: vec![0; 19], kind: RecvKind::Data };
-        oracle.check(&[], &timeout, &[]);
-        oracle.check(&[], &timeout, &[]);
+        oracle.check(&[], &timeout, &[], Instant::now());
+        oracle.check(&[], &timeout, &[], Instant::now());
         assert_eq!(oracle.consecutive_timeouts, 2);
-        oracle.check(&[], &data, &[]);
+        oracle.check(&[], &data, &[], Instant::now());
         assert_eq!(oracle.consecutive_timeouts, 0);
     }
 }
