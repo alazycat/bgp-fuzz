@@ -108,10 +108,16 @@ impl FuzzSession {
                 return Ok(());
             }
 
-            let (outcome, current_history_len, send_time) =
-                self.send_and_recv(&mut stream, msg_bytes).await?;
+            // Poll oracle triggers — use trigger bytes if available, else generator output
+            let final_bytes = self.oracles.iter_mut()
+                .filter_map(|o| o.take_trigger())
+                .next()
+                .unwrap_or_else(|| msg_bytes.clone());
 
-            self.process_outcome(msg_bytes, outcome, send_time, current_history_len, bugs).await;
+            let (outcome, current_history_len, send_time) =
+                self.send_and_recv(&mut stream, &final_bytes).await?;
+
+            self.process_outcome(&final_bytes, outcome, send_time, current_history_len, bugs).await;
 
             tokio::time::sleep(rate_delay).await;
         }
