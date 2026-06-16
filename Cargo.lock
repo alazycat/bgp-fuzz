@@ -88,6 +88,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bgp-fuzz-driver"
+version = "0.1.0"
+dependencies = [
+ "bgp-fsm",
+ "bgp-fuzz-oracle",
+ "bgp-wire",
+ "chrono",
+ "tokio",
+]
+
+[[package]]
 name = "bgp-fuzz-gen"
 version = "0.1.0"
 dependencies = [
