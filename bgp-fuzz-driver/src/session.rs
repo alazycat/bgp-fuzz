@@ -108,10 +108,10 @@ impl FuzzSession {
                 return Ok(());
             }
 
-            let (outcome, current_history_len) =
+            let (outcome, current_history_len, send_time) =
                 self.send_and_recv(&mut stream, msg_bytes).await?;
 
-            self.process_outcome(msg_bytes, outcome, current_history_len, bugs).await;
+            self.process_outcome(msg_bytes, outcome, send_time, current_history_len, bugs).await;
 
             tokio::time::sleep(rate_delay).await;
         }
@@ -123,10 +123,11 @@ impl FuzzSession {
         &mut self,
         stream: &mut TcpStream,
         msg_bytes: &[u8],
-    ) -> Result<(RecvOutcome, usize), ()> {
+    ) -> Result<(RecvOutcome, usize, Instant), ()> {
         if tokio::io::AsyncWriteExt::write_all(stream, msg_bytes).await.is_err() {
             return Err(());
         }
+        let send_time = Instant::now();
         self.fsm_driver.on_send(msg_bytes);
         self.stats.msgs_sent += 1;
         self.message_history.push(msg_bytes.to_vec());
@@ -158,13 +159,14 @@ impl FuzzSession {
             Err(_) => RecvOutcome { bytes: vec![], kind: RecvKind::Timeout },
         };
 
-        Ok((outcome, history_len))
+        Ok((outcome, history_len, send_time))
     }
 
     async fn process_outcome(
         &mut self,
         sent: &[u8],
         outcome: RecvOutcome,
+        send_time: Instant,
         history_len: usize,
         bugs: &mut Vec<BugReport>,
     ) {
@@ -173,7 +175,7 @@ impl FuzzSession {
 
         let mut findings = Vec::new();
         for oracle in &mut self.oracles {
-            findings.extend(oracle.check(sent, &outcome, &log));
+            findings.extend(oracle.check(sent, &outcome, &log, send_time));
         }
 
         let target = self.config.target.to_string();

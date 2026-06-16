@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::{Finding, Oracle, RecvKind, RecvOutcome};
 
 #[derive(Debug, Default)]
@@ -13,6 +15,7 @@ impl Oracle for CrashOracle {
         sent: &[u8],
         outcome: &RecvOutcome,
         _fsm_log: &[bgp_fsm::LogEntry],
+        _send_time: Instant,
     ) -> Vec<Finding> {
         match outcome.kind {
             RecvKind::ConnectionReset => vec![Finding::PeerReset { sent_len: sent.len() }],
@@ -30,7 +33,7 @@ mod tests {
     fn rst_detected() {
         let mut oracle = CrashOracle;
         let outcome = RecvOutcome { bytes: vec![], kind: RecvKind::ConnectionReset };
-        let findings = oracle.check(&[0xFF; 29], &outcome, &[]);
+        let findings = oracle.check(&[0xFF; 29], &outcome, &[], Instant::now());
         assert_eq!(findings.len(), 1);
         assert!(matches!(findings[0], Finding::PeerReset { sent_len: 29 }));
     }
@@ -39,7 +42,7 @@ mod tests {
     fn fin_detected() {
         let mut oracle = CrashOracle;
         let outcome = RecvOutcome { bytes: vec![], kind: RecvKind::PeerClosed };
-        let findings = oracle.check(&[0xFF; 19], &outcome, &[]);
+        let findings = oracle.check(&[0xFF; 19], &outcome, &[], Instant::now());
         assert_eq!(findings.len(), 1);
         assert!(matches!(findings[0], Finding::PeerClosed { sent_len: 19 }));
     }
@@ -48,7 +51,7 @@ mod tests {
     fn normal_data_no_bug() {
         let mut oracle = CrashOracle;
         let outcome = RecvOutcome { bytes: vec![0xFF; 19], kind: RecvKind::Data };
-        let findings = oracle.check(&[], &outcome, &[]);
+        let findings = oracle.check(&[], &outcome, &[], Instant::now());
         assert!(findings.is_empty());
     }
 }

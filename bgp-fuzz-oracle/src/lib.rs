@@ -8,6 +8,7 @@ pub use fsm::FsmConsistencyOracle;
 pub use response::ResponseOracle;
 
 use std::fmt::Debug;
+use std::time::Instant;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -117,6 +118,16 @@ pub enum Finding {
     LegalRejected { state: String, event_description: String },
     /// Peer did not respond within the hold time.
     Timeout { consecutive: u32, timeout_secs: u64 },
+    /// UPDATE round-trip: sent NLRI not mirrored back by peer.
+    AttributeEcho { missing: Vec<String>, extra: Vec<String> },
+    /// UPDATE strict mirror: peer modified bytes unnecessarily.
+    AttributeMirror { diff: String },
+    /// Peer returned wrong or missing NOTIFICATION error code/subcode.
+    NotificationCode { expected: String, actual: String },
+    /// Capability negotiation anomaly.
+    CapNegotiation { description: String },
+    /// KEEPALIVE response latency spike detected.
+    LatencySpike { current_ms: u64, baseline_ms: u64 },
 }
 
 impl Finding {
@@ -233,6 +244,75 @@ impl Finding {
                     ),
                 )
             }
+            Finding::AttributeEcho { missing, extra } => make_report(
+                format!("UPDATE NLRI not echoed — missing: {}, extra: {}", missing.len(), extra.len()),
+                BugSeverity::High,
+                Some("RFC 4271 §4.3 — NLRI must be echoed correctly".into()),
+                ReproStep {
+                    direction: Direction::Send,
+                    hex: sent_hex,
+                    expected: "peer should echo sent NLRI".into(),
+                    actual: format!("missing: [{}], extra: [{}]", missing.join(", "), extra.join(", ")),
+                },
+                format!(
+                    "Sent UPDATE with NLRI but peer response missing {} prefixes and adding {} unexpected prefixes.",
+                    missing.len(), extra.len()
+                ),
+            ),
+            Finding::AttributeMirror { diff } => make_report(
+                "Peer modified UPDATE bytes in strict mirror".into(),
+                BugSeverity::Medium,
+                Some("RFC 4271 §4.3 — UPDATE should be echoed byte-for-byte".into()),
+                ReproStep {
+                    direction: Direction::Send,
+                    hex: sent_hex,
+                    expected: "peer should echo UPDATE byte-for-byte".into(),
+                    actual: format!("UPDATE modified: {}", diff),
+                },
+                format!("Peer modified the UPDATE message bytes: {}", diff),
+            ),
+            Finding::NotificationCode { expected, actual } => make_report(
+                format!("NOTIFICATION error code mismatch — expected: {}, actual: {}", expected, actual),
+                BugSeverity::High,
+                Some("RFC 7606 — Error Handling".into()),
+                ReproStep {
+                    direction: Direction::Send,
+                    hex: sent_hex,
+                    expected: expected.clone(),
+                    actual: actual.clone(),
+                },
+                format!(
+                    "Peer returned incorrect NOTIFICATION. Expected: {}. Actual: {}.",
+                    expected, actual
+                ),
+            ),
+            Finding::CapNegotiation { description } => make_report(
+                format!("Capability negotiation anomaly: {}", description),
+                BugSeverity::Medium,
+                Some("RFC 5492 — Capabilities Advertisement".into()),
+                ReproStep {
+                    direction: Direction::Send,
+                    hex: sent_hex,
+                    expected: "peer should handle capability correctly".into(),
+                    actual: description.clone(),
+                },
+                description,
+            ),
+            Finding::LatencySpike { current_ms, baseline_ms } => make_report(
+                format!("KEEPALIVE latency spike: {}ms (baseline: {}ms)", current_ms, baseline_ms),
+                BugSeverity::Medium,
+                None,
+                ReproStep {
+                    direction: Direction::Send,
+                    hex: sent_hex,
+                    expected: format!("KEEPALIVE response within {}ms", baseline_ms),
+                    actual: format!("{}ms ({}x baseline)", current_ms, current_ms as f64 / baseline_ms as f64),
+                },
+                format!(
+                    "KEEPALIVE response time spiked to {}ms, {}x the baseline mean of {}ms.",
+                    current_ms, current_ms as f64 / baseline_ms as f64, baseline_ms
+                ),
+            ),
         }
     }
 }
@@ -256,7 +336,14 @@ pub trait Oracle: Debug + Send + Sync {
         sent: &[u8],
         outcome: &RecvOutcome,
         fsm_log: &[bgp_fsm::LogEntry],
+        send_time: Instant,
     ) -> Vec<Finding>;
+
+    /// Oracle can provide a trigger message to inject into the send loop.
+    /// Called before the generator produces the next message. Default: None.
+    fn take_trigger(&mut self) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 #[cfg(test)]
