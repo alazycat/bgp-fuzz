@@ -3,7 +3,6 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
-use proptest::prelude::*;
 
 enum Shutdown {
     SendFin,
@@ -86,6 +85,14 @@ enum Command {
         #[arg(long)]
         seed: Option<u64>,
 
+        /// Generation strategy: all, grammar, raw, mutation (default: all)
+        #[arg(long, default_value = "all")]
+        strategy: String,
+
+        /// Enable automatic repro shrinking (delta debugging)
+        #[arg(long, default_value = "false")]
+        shrink: bool,
+
         /// Verbose output
         #[arg(short, long, default_value = "false")]
         verbose: bool,
@@ -100,6 +107,24 @@ enum Command {
         #[arg(short, long)]
         target: SocketAddr,
     },
+}
+
+fn generator_config_for_strategy(strategy: &str, seed: Option<u64>) -> bgp_fuzz_gen::GeneratorConfig {
+    use bgp_fuzz_gen::{GeneratorConfig, LayerWeights, SeqLenWeights};
+
+    let layer_weights = match strategy {
+        "grammar" => LayerWeights { grammar: 1, raw: 0, mutation: 0 },
+        "raw" => LayerWeights { grammar: 0, raw: 1, mutation: 0 },
+        "mutation" => LayerWeights { grammar: 0, raw: 0, mutation: 1 },
+        _ => LayerWeights::default(), // "all" or unknown
+    };
+
+    GeneratorConfig {
+        layer_weights,
+        seq_len_weights: SeqLenWeights::default(),
+        seed: seed.unwrap_or(0),
+        ..GeneratorConfig::default()
+    }
 }
 
 #[tokio::main]
@@ -148,7 +173,7 @@ async fn main() {
             let shutdown = if send_close { Shutdown::SendFin } else { Shutdown::KeepOpen };
             run_fuzz(target, &bytes, connect_timeout, recv_timeout, shutdown, verbose).await;
         }
-        Command::Fuzz { target, duration, rate_limit, output, seed: _seed, verbose } => {
+        Command::Fuzz { target, duration, rate_limit, output, seed, shrink, strategy, verbose } => {
             let dur = humantime::parse_duration(&duration)
                 .unwrap_or_else(|e| {
                     eprintln!("ERROR: invalid duration '{duration}': {e}");
@@ -161,6 +186,7 @@ async fn main() {
                 rate_limit,
                 output_dir: output,
                 verbose,
+                enable_shrink: shrink,
             };
 
             let fsm_driver = bgp_fuzz_driver::FsmDriver::new(180);
@@ -174,22 +200,15 @@ async fn main() {
 
             let mut session = bgp_fuzz_driver::FuzzSession::new(config, fsm_driver, oracles);
 
-            // Quick grammar-based generator: single random message each iteration
-            let generator = || {
-                use bgp_fuzz_gen::single_message_bytes_strategy;
-                use proptest::strategy::ValueTree;
-                let mut runner = proptest::test_runner::TestRunner::deterministic();
-                let strategy = single_message_bytes_strategy();
-                let mut msgs = Vec::new();
-                for _ in 0..10 {
-                    if let Ok(tree) = strategy.new_tree(&mut runner) {
-                        msgs.push(tree.current());
-                    }
-                }
-                msgs
-            };
+            let gen_config = generator_config_for_strategy(strategy.as_str(), seed);
 
-            eprintln!("[INFO] target: {target}  duration: {duration}  strategy: grammar");
+            let bgp_gen = std::cell::RefCell::new(bgp_fuzz_gen::Generator::new(gen_config));
+            let generator = move || bgp_gen.borrow_mut().generate_batch();
+
+            eprintln!("[INFO] target: {target}  duration: {duration}  strategy: {strategy}");
+            if seed.is_some() {
+                eprintln!("[INFO] seed: {}", seed.unwrap());
+            }
             let _bugs = session.run(generator).await;
         }
         Command::Replay { report: report_path, target } => {
@@ -208,8 +227,53 @@ async fn main() {
                 }
             };
             eprintln!("REPLAY: {} (target: {target})", bug.title);
-            // TODO: replay each repro step against target
-            eprintln!("Repro steps: {}", bug.repro.len());
+            eprintln!("Severity: {:?}", bug.severity);
+            if let Some(ref rfc) = bug.rfc_reference {
+                eprintln!("RFC: {rfc}");
+            }
+            eprintln!("Steps: {}\n", bug.repro.len());
+
+            for (i, step) in bug.repro.iter().enumerate() {
+                eprintln!("[{}/{}] {} ({} bytes)", i + 1, bug.repro.len(), step.direction.direction_label(), step.hex.len() / 2);
+
+                match step.direction {
+                    bgp_fuzz_oracle::Direction::Send => {
+                        let bytes = match decode_hex(&step.hex) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                eprintln!("  ERROR: cannot decode hex: {e}");
+                                continue;
+                            }
+                        };
+                        let mut stream = connect_to_peer(target, 5).await;
+                        send_payload(&mut stream, &bytes).await;
+
+                        let mut buf = vec![0u8; 4096];
+                        let recv = tokio::time::timeout(
+                            Duration::from_secs(3),
+                            tokio::io::AsyncReadExt::read(&mut stream, &mut buf),
+                        )
+                        .await;
+
+                        match recv {
+                            Ok(Ok(0)) => eprintln!("  → PEER CLOSED (FIN)"),
+                            Ok(Ok(n)) => {
+                                eprintln!("  → RECV {n} bytes");
+                                dump_hex(&buf[..n]);
+                            }
+                            Ok(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionReset => {
+                                eprintln!("  → PEER SENT RST — crash reproduced");
+                            }
+                            Ok(Err(e)) => eprintln!("  → ERROR: {e}"),
+                            Err(_) => eprintln!("  → TIMEOUT (no response)"),
+                        }
+                    }
+                    bgp_fuzz_oracle::Direction::Receive => {
+                        eprintln!("  (expected to receive: {} bytes)", step.hex.len() / 2);
+                    }
+                }
+                eprintln!();
+            }
         }
     }
 }

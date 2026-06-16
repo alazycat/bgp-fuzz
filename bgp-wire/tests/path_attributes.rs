@@ -11,7 +11,7 @@ fn origin_roundtrip_igp() {
     let mut buf = vec![];
     attr.encode_value(&mut buf);
     assert_eq!(buf, [0x00]);
-    let (decoded, n) = Origin::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, n) = Origin::decode_value(1, attr.attr_flags(), &buf).unwrap();
     assert_eq!(n, 1);
     assert_eq!(decoded.0, 0);
 }
@@ -38,7 +38,7 @@ fn origin_preserves_illegal_values() {
         let attr = Origin(v);
         let mut buf = vec![];
         attr.encode_value(&mut buf);
-        let (decoded, _) = Origin::decode_value(attr.attr_flags(), &buf).unwrap();
+        let (decoded, _) = Origin::decode_value(1, attr.attr_flags(), &buf).unwrap();
         assert_eq!(decoded.0, v);
     }
 }
@@ -67,7 +67,7 @@ fn as_path_roundtrip_single_as_sequence() {
     assert_eq!(u32::from_be_bytes([buf[2], buf[3], buf[4], buf[5]]), 65001);
     assert_eq!(u32::from_be_bytes([buf[6], buf[7], buf[8], buf[9]]), 65002);
 
-    let (decoded, n) = AsPath::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, n) = AsPath::decode_value(2, attr.attr_flags(), &buf).unwrap();
     assert_eq!(n, 14); // 2 + 3*4
     assert_eq!(decoded.segments.len(), 1);
     match &decoded.segments[0] {
@@ -86,7 +86,7 @@ fn as_path_roundtrip_as_set() {
     assert_eq!(buf[0], 1); // AS_SET
     assert_eq!(buf[1], 2); // 2 AS numbers
 
-    let (decoded, _) = AsPath::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, _) = AsPath::decode_value(2, attr.attr_flags(), &buf).unwrap();
     match &decoded.segments[0] {
         AsPathSegment::AsSet(asns) => assert_eq!(asns, &[100, 200]),
         _ => panic!("expected AsSet"),
@@ -104,7 +104,7 @@ fn as_path_multi_segment() {
     };
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = AsPath::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, _) = AsPath::decode_value(2, attr.attr_flags(), &buf).unwrap();
     assert_eq!(decoded.segments.len(), 3);
 }
 
@@ -115,7 +115,7 @@ fn as_path_empty_is_valid() {
     let mut buf = vec![];
     attr.encode_value(&mut buf);
     assert!(buf.is_empty());
-    let (decoded, _) = AsPath::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, _) = AsPath::decode_value(2, attr.attr_flags(), &buf).unwrap();
     assert!(decoded.segments.is_empty());
 }
 
@@ -127,7 +127,7 @@ fn next_hop_roundtrip() {
     let mut buf = vec![];
     attr.encode_value(&mut buf);
     assert_eq!(buf, [10, 0, 0, 1]);
-    let (decoded, n) = NextHop::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, n) = NextHop::decode_value(3, attr.attr_flags(), &buf).unwrap();
     assert_eq!(n, 4);
     assert_eq!(decoded.0, [10, 0, 0, 1]);
 }
@@ -137,7 +137,7 @@ fn next_hop_preserves_zero_addr() {
     let attr = NextHop([0, 0, 0, 0]);
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = NextHop::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, _) = NextHop::decode_value(3, attr.attr_flags(), &buf).unwrap();
     assert_eq!(decoded.0, [0, 0, 0, 0]);
 }
 

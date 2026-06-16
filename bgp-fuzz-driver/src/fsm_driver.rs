@@ -1,6 +1,6 @@
-use bgp_fsm::{EventType, FsmEvent, Legality, ShadowFsm, State};
-use bgp_fuzz_oracle::LogEntry;
+use bgp_fsm::{EventType, FsmEvent, Legality, LogEntry, ShadowFsm, State};
 use bgp_wire::{BgpMessage, MessageHeader, WireDecode};
+
 /// Wraps ShadowFsm with automatic event logging.
 ///
 /// Every send and receive event is classified, fed to the FSM,
@@ -21,7 +21,7 @@ impl FsmDriver {
         }
     }
 
-    /// Record a send event and advance the FSM
+    /// Record a send event and advance the FSM.
     pub fn on_send(&mut self, bytes: &[u8]) -> &LogEntry {
         let event_type = classify_message(bytes);
         let event = FsmEvent::Message { event_type, raw_bytes: bytes.to_vec() };
@@ -29,7 +29,7 @@ impl FsmDriver {
         self.push_log(state_after, legality, format!("Sent {}B: {:?}", bytes.len(), event_type))
     }
 
-    /// Record a receive event and advance the FSM
+    /// Record a receive event and advance the FSM.
     pub fn on_recv(&mut self, bytes: &[u8]) -> &LogEntry {
         let event_type = classify_message(bytes);
         let event = FsmEvent::Message { event_type, raw_bytes: bytes.to_vec() };
@@ -37,7 +37,7 @@ impl FsmDriver {
         self.push_log(state_after, legality, format!("Recv {}B: {:?}", bytes.len(), event_type))
     }
 
-    /// Record a timer expiry event
+    /// Record a timer expiry event.
     pub fn on_timer(&mut self, event_type: EventType) -> &LogEntry {
         let event = FsmEvent::Timer(event_type);
         let (state_after, legality) = self.fsm.step(&event);
@@ -53,14 +53,6 @@ impl FsmDriver {
         self.event_log.last().unwrap()
     }
 
-    pub fn current_state(&self) -> State {
-        self.fsm.current_state()
-    }
-
-    pub fn set_state(&mut self, state: State) {
-        self.fsm.set_state(state);
-    }
-
     pub fn event_log(&self) -> &[LogEntry] {
         &self.event_log
     }
@@ -74,7 +66,7 @@ impl FsmDriver {
     }
 }
 
-/// Quick message classification: try BgpMessage::decode, fall back to header type_code
+/// Quick message classification: try BgpMessage::decode, fall back to header type_code.
 fn classify_message(bytes: &[u8]) -> EventType {
     if let Ok((msg, _)) = BgpMessage::decode(bytes) {
         match msg {
@@ -100,15 +92,13 @@ fn classify_message(bytes: &[u8]) -> EventType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bgp_wire::WireEncode;
 
     #[test]
     fn on_send_advances_fsm() {
         let mut driver = FsmDriver::new(180);
-        // OPEN message bytes
         let open_bytes = {
-            use bgp_wire::open::OpenMessage;
-            use bgp_wire::WireEncode;
-            let msg = OpenMessage {
+            let msg = bgp_wire::open::OpenMessage {
                 version: 4, my_as: 65001, hold_time: 180,
                 bgp_id: [10, 0, 0, 1], optional_parameters: vec![],
             };
@@ -117,9 +107,7 @@ mod tests {
             buf
         };
         let legality = driver.on_send(&open_bytes).legality.clone();
-        let state = driver.current_state();
-        assert_eq!(legality, "Illegal"); // Idle + BgpOpen is illegal per RFC
-        assert_eq!(state, bgp_fsm::State::Idle);
+        assert_eq!(legality, "Illegal");
     }
 
     #[test]
@@ -140,8 +128,7 @@ mod tests {
     #[test]
     fn fsm_full_session_flow() {
         let mut driver = FsmDriver::new(180);
-        driver.set_state(bgp_fsm::State::Connect);
-        driver.on_send(&[0xFF; 19]); // KEEPALIVE-like
+        driver.on_send(&[0xFF; 19]);
         assert_eq!(driver.event_log().len(), 1);
     }
 }

@@ -1,7 +1,5 @@
-use crate::{BugReport, BugSeverity, LogEntry, Oracle, RecvKind, RecvOutcome, SessionStats, ReproStep, Direction};
-use chrono::Utc;
+use crate::{Finding, Oracle, RecvKind, RecvOutcome};
 
-/// Detects peer crashes: TCP RST and unexpected connection close.
 #[derive(Debug, Default)]
 pub struct CrashOracle;
 
@@ -14,53 +12,11 @@ impl Oracle for CrashOracle {
         &mut self,
         sent: &[u8],
         outcome: &RecvOutcome,
-        _fsm_log: &[LogEntry],
-        _stats: &SessionStats,
-    ) -> Vec<BugReport> {
-        let now = Utc::now().to_rfc3339();
-        let sent_hex = hex::encode(sent);
-
+        _fsm_log: &[bgp_fsm::LogEntry],
+    ) -> Vec<Finding> {
         match outcome.kind {
-            RecvKind::ConnectionReset => {
-                vec![BugReport {
-                    id: format!("BGP-FUZZ-{}", now.replace(['-', ':'], "").split_at(15).0),
-                    title: format!("Peer sent RST after {} byte message", sent.len()),
-                    severity: BugSeverity::Critical,
-                    target: String::new(),
-                    rfc_reference: None,
-                    fsm_trace: vec![],
-                    repro: vec![ReproStep {
-                        direction: Direction::Send,
-                        hex: sent_hex,
-                        expected: "peer should accept message".into(),
-                        actual: "peer sent TCP RST (likely crash)".into(),
-                    }],
-                    discovered_at: now,
-                    description: format!(
-                        "Target sent TCP RST after receiving a {} byte message. \
-                         This likely indicates a crash or assertion failure.",
-                        sent.len()
-                    ),
-                }]
-            }
-            RecvKind::PeerClosed => {
-                vec![BugReport {
-                    id: format!("BGP-FUZZ-{}", now.replace(['-', ':'], "").split_at(15).0),
-                    title: format!("Peer closed connection unexpectedly after {} byte message", sent.len()),
-                    severity: BugSeverity::High,
-                    target: String::new(),
-                    rfc_reference: None,
-                    fsm_trace: vec![],
-                    repro: vec![ReproStep {
-                        direction: Direction::Send,
-                        hex: sent_hex,
-                        expected: "peer should keep connection open".into(),
-                        actual: "peer sent FIN (clean close)".into(),
-                    }],
-                    discovered_at: now,
-                    description: "Peer cleanly closed the connection at an unexpected time.".into(),
-                }]
-            }
+            RecvKind::ConnectionReset => vec![Finding::PeerReset { sent_len: sent.len() }],
+            RecvKind::PeerClosed => vec![Finding::PeerClosed { sent_len: sent.len() }],
             _ => vec![],
         }
     }
@@ -71,38 +27,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rst_reports_critical() {
+    fn rst_detected() {
         let mut oracle = CrashOracle;
-        let outcome = RecvOutcome {
-            bytes: vec![],
-            kind: RecvKind::ConnectionReset,
-        };
-        let bugs = oracle.check(&[0xFF; 29], &outcome, &[], &SessionStats::default());
-        assert_eq!(bugs.len(), 1);
-        assert_eq!(bugs[0].severity, BugSeverity::Critical);
-        assert!(bugs[0].title.contains("RST"));
+        let outcome = RecvOutcome { bytes: vec![], kind: RecvKind::ConnectionReset };
+        let findings = oracle.check(&[0xFF; 29], &outcome, &[]);
+        assert_eq!(findings.len(), 1);
+        assert!(matches!(findings[0], Finding::PeerReset { sent_len: 29 }));
     }
 
     #[test]
-    fn eof_reports_high() {
+    fn fin_detected() {
         let mut oracle = CrashOracle;
-        let outcome = RecvOutcome {
-            bytes: vec![],
-            kind: RecvKind::PeerClosed,
-        };
-        let bugs = oracle.check(&[0xFF; 19], &outcome, &[], &SessionStats::default());
-        assert_eq!(bugs.len(), 1);
-        assert_eq!(bugs[0].severity, BugSeverity::High);
+        let outcome = RecvOutcome { bytes: vec![], kind: RecvKind::PeerClosed };
+        let findings = oracle.check(&[0xFF; 19], &outcome, &[]);
+        assert_eq!(findings.len(), 1);
+        assert!(matches!(findings[0], Finding::PeerClosed { sent_len: 19 }));
     }
 
     #[test]
     fn normal_data_no_bug() {
         let mut oracle = CrashOracle;
-        let outcome = RecvOutcome {
-            bytes: vec![0xFF; 19],
-            kind: RecvKind::Data,
-        };
-        let bugs = oracle.check(&[], &outcome, &[], &SessionStats::default());
-        assert!(bugs.is_empty());
+        let outcome = RecvOutcome { bytes: vec![0xFF; 19], kind: RecvKind::Data };
+        let findings = oracle.check(&[], &outcome, &[]);
+        assert!(findings.is_empty());
     }
 }

@@ -20,7 +20,7 @@ fn med_roundtrip() {
     attr.encode_value(&mut buf);
     assert_eq!(buf.len(), 4);
     assert_eq!(u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]), 100);
-    let (decoded, n) = MultiExitDisc::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, n) = MultiExitDisc::decode_value(4, attr.attr_flags(), &buf).unwrap();
     assert_eq!(n, 4);
     assert_eq!(decoded.0, 100);
 }
@@ -30,7 +30,7 @@ fn med_zero_metric() {
     let attr = MultiExitDisc(0);
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = MultiExitDisc::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, _) = MultiExitDisc::decode_value(4, attr.attr_flags(), &buf).unwrap();
     assert_eq!(decoded.0, 0);
 }
 
@@ -54,7 +54,7 @@ fn local_pref_roundtrip() {
     attr.encode_value(&mut buf);
     assert_eq!(buf.len(), 4);
     assert_eq!(u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]), 200);
-    let (decoded, n) = LocalPref::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, n) = LocalPref::decode_value(5, attr.attr_flags(), &buf).unwrap();
     assert_eq!(n, 4);
     assert_eq!(decoded.0, 200);
 }
@@ -65,7 +65,7 @@ fn local_pref_high_value() {
     let attr = LocalPref(4294967295);
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = LocalPref::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, _) = LocalPref::decode_value(5, attr.attr_flags(), &buf).unwrap();
     assert_eq!(decoded.0, 4294967295);
 }
 
@@ -82,7 +82,7 @@ fn atomic_aggregate_roundtrip() {
     attr.encode_value(&mut buf);
     assert!(buf.is_empty());
 
-    let (decoded, n) = AtomicAggregate::decode_value(attr.attr_flags(), &[]).unwrap();
+    let (decoded, n) = AtomicAggregate::decode_value(6, attr.attr_flags(), &[]).unwrap();
     assert_eq!(n, 0);
     assert_eq!(format!("{:?}", decoded), "AtomicAggregate");
 }
@@ -101,7 +101,7 @@ fn aggregator_roundtrip() {
     let mut buf = vec![];
     attr.encode_value(&mut buf);
     assert_eq!(buf.len(), 6); // AS(2) + IP(4)
-    let (decoded, n) = Aggregator::decode_value(attr.attr_flags(), &buf).unwrap();
+    let (decoded, n) = Aggregator::decode_value(7, attr.attr_flags(), &buf).unwrap();
     assert_eq!(n, 6);
     assert_eq!(decoded.as_number, 65001);
     assert_eq!(decoded.ip_address, [10, 0, 0, 1]);
@@ -110,7 +110,7 @@ fn aggregator_roundtrip() {
 #[test]
 fn aggregator_decode_incomplete() {
     let buf = [0x00, 0x01, 0x0A]; // only 3 bytes
-    let err = Aggregator::decode_value(0xC0, &buf).unwrap_err();
+    let err = Aggregator::decode_value(7, 0xC0, &buf).unwrap_err();
     assert!(matches!(
         err,
         bgp_wire::DecodeError::Incomplete {

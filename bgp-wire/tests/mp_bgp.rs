@@ -31,7 +31,7 @@ fn mp_reach_ipv6_unicast_roundtrip() {
     assert_eq!(buf[20], 0x00);               // Reserved
     assert_eq!(buf[21], 32);                 // NLRI prefix_len
 
-    let (decoded, n) = MpReachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, n) = MpReachNlri::decode_value(14, 0x80, &buf).unwrap();
     assert_eq!(n, 26); // 2+1+1+16+1+1+4 = 26
     assert_eq!(decoded.afi, 2);
     assert_eq!(decoded.safi, 1);
@@ -53,7 +53,7 @@ fn mp_reach_ipv4_unicast_roundtrip() {
 
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = MpReachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, _) = MpReachNlri::decode_value(14, 0x80, &buf).unwrap();
     assert_eq!(decoded.afi, 1);
     assert_eq!(decoded.safi, 1);
     assert_eq!(decoded.next_hop, vec![10, 0, 0, 1]);
@@ -74,7 +74,7 @@ fn mp_reach_zero_next_hop_len() {
     attr.encode_value(&mut buf);
     assert_eq!(buf[3], 0); // NextHopLen=0
 
-    let (decoded, _) = MpReachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, _) = MpReachNlri::decode_value(14, 0x80, &buf).unwrap();
     assert!(decoded.next_hop.is_empty());
     assert_eq!(decoded.nlri.len(), 1);
 }
@@ -91,7 +91,7 @@ fn mp_reach_unknown_afi_safi() {
 
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = MpReachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, _) = MpReachNlri::decode_value(14, 0x80, &buf).unwrap();
     assert_eq!(decoded.afi, 0xFFFF);
     assert_eq!(decoded.safi, 200);
 }
@@ -111,7 +111,7 @@ fn mp_reach_multiple_nlri() {
 
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = MpReachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, _) = MpReachNlri::decode_value(14, 0x80, &buf).unwrap();
     assert_eq!(decoded.nlri.len(), 3);
 }
 
@@ -137,7 +137,7 @@ fn mp_unreach_ipv6_roundtrip() {
     assert_eq!(&buf[0..2], &[0x00, 0x02]);  // AFI=2
     assert_eq!(buf[2], 1);                   // SAFI=1
 
-    let (decoded, _) = MpUnreachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, _) = MpUnreachNlri::decode_value(15, 0x80, &buf).unwrap();
     assert_eq!(decoded.afi, 2);
     assert_eq!(decoded.safi, 1);
     assert_eq!(decoded.withdrawn.len(), 2);
@@ -154,7 +154,7 @@ fn mp_unreach_ipv4_roundtrip() {
 
     let mut buf = vec![];
     attr.encode_value(&mut buf);
-    let (decoded, _) = MpUnreachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, _) = MpUnreachNlri::decode_value(15, 0x80, &buf).unwrap();
     assert_eq!(decoded.afi, 1);
     assert_eq!(decoded.withdrawn.len(), 1);
 }
@@ -170,7 +170,7 @@ fn mp_unreach_empty_withdrawn() {
     let mut buf = vec![];
     attr.encode_value(&mut buf);
     assert_eq!(buf.len(), 3); // just AFI + SAFI
-    let (decoded, _) = MpUnreachNlri::decode_value(0x80, &buf).unwrap();
+    let (decoded, _) = MpUnreachNlri::decode_value(15, 0x80, &buf).unwrap();
     assert!(decoded.withdrawn.is_empty());
 }
 

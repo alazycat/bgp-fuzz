@@ -7,5 +7,7 @@ edition = "2024"
 bgp-wire = { path = "../bgp-wire" }
 bgp-fsm = { path = "../bgp-fsm" }
 bgp-fuzz-oracle = { path = "../bgp-fuzz-oracle" }
+async-trait = "0.1"
 chrono = "0.4"
+hex = "0.4"
 tokio = { version = "1", features = ["net", "time", "io-util", "macros", "rt-multi-thread", "signal"] }

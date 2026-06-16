@@ -14,22 +14,22 @@ use bgp_wire::keepalive::KeepaliveMessage;
 use bgp_wire::notification::NotificationMessage;
 use bgp_wire::{BgpMessage, NlriPrefix, WireEncode};
 use proptest::prelude::*;
-use crate::timing::{FuzzMessage, timing_strategy};
+use crate::generator::{FuzzMessage, timing_strategy};
 
 // ─── Weighted distribution config ───
 
 /// Weighted distribution for message types in a sequence
 #[derive(Debug, Clone)]
-pub struct SequenceWeights {
+pub struct MessageTypeWeights {
     pub open: u32,
     pub update: u32,
     pub keepalive: u32,
     pub notification: u32,
 }
 
-impl Default for SequenceWeights {
+impl Default for MessageTypeWeights {
     fn default() -> Self {
-        SequenceWeights {
+        MessageTypeWeights {
             open: 30,
             update: 40,
             keepalive: 20,
@@ -38,19 +38,19 @@ impl Default for SequenceWeights {
     }
 }
 
-/// Generator configuration
+/// Configuration for the grammar-based sequence strategy.
 #[derive(Debug, Clone)]
-pub struct GeneratorConfig {
-    pub weights: SequenceWeights,
+pub struct SeqStrategyConfig {
+    pub weights: MessageTypeWeights,
     pub min_seq_len: usize,
     pub max_seq_len: usize,
     pub seed: Option<u64>,
 }
 
-impl Default for GeneratorConfig {
+impl Default for SeqStrategyConfig {
     fn default() -> Self {
-        GeneratorConfig {
-            weights: SequenceWeights::default(),
+        SeqStrategyConfig {
+            weights: MessageTypeWeights::default(),
             min_seq_len: 1,
             max_seq_len: 200,
             seed: None,
@@ -235,12 +235,12 @@ fn notification_strategy() -> impl Strategy<Value = NotificationMessage> {
 
 /// Strategy for a single BGP message: produces BgpMessage (not bytes)
 fn bgp_message_strategy() -> impl Strategy<Value = BgpMessage> {
-    bgp_message_strategy_weighted(SequenceWeights::default())
+    bgp_message_strategy_weighted(MessageTypeWeights::default())
 }
 
 /// Strategy with custom type weights
 fn bgp_message_strategy_weighted(
-    weights: SequenceWeights,
+    weights: MessageTypeWeights,
 ) -> impl Strategy<Value = BgpMessage> {
     let w_open = weights.open;
     let w_update = weights.update;
@@ -256,7 +256,7 @@ fn bgp_message_strategy_weighted(
 
 /// Strategy for a single fuzz message with custom weights
 fn fuzz_message_strategy_weighted(
-    weights: SequenceWeights,
+    weights: MessageTypeWeights,
 ) -> impl Strategy<Value = FuzzMessage> {
     (timing_strategy(), bgp_message_strategy_weighted(weights.clone())).prop_map(|(timing, msg)| {
         let mut bytes = vec![];
@@ -269,7 +269,7 @@ fn fuzz_message_strategy_weighted(
 
 /// Generate a sequence of FuzzMessage with configurable weights and length
 pub fn message_sequence_strategy(
-    config: &GeneratorConfig,
+    config: &SeqStrategyConfig,
 ) -> impl Strategy<Value = Vec<FuzzMessage>> {
     let strategy = fuzz_message_strategy_weighted(config.weights.clone());
     prop::collection::vec(strategy, config.min_seq_len..=config.max_seq_len)
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn sequence_strategy_respects_length_config() {
         let mut runner = proptest::test_runner::TestRunner::deterministic();
-        let config = GeneratorConfig {
+        let config = SeqStrategyConfig {
             min_seq_len: 5,
             max_seq_len: 10,
             ..Default::default()
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn weighted_strategy_skews_distribution() {
         let mut runner = proptest::test_runner::TestRunner::deterministic();
-        let open_heavy = SequenceWeights { open: 90, update: 10, keepalive: 0, notification: 0 };
+        let open_heavy = MessageTypeWeights { open: 90, update: 10, keepalive: 0, notification: 0 };
         let strategy = bgp_message_strategy_weighted(open_heavy);
         let mut open_count = 0;
         let total = 200;

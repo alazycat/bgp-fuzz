@@ -28,7 +28,7 @@ impl PathAttribute for Aggregator {
         buf.extend_from_slice(&self.ip_address);
     }
 
-    fn decode_value(_flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
+    fn decode_value(_type_code: u8, _flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
         if buf.len() < 6 {
             return Err(DecodeError::Incomplete {
                 min_required: 6,

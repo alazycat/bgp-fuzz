@@ -32,8 +32,9 @@ pub trait PathAttribute: Debug + Send + Sync {
     /// Encode attribute VALUE to buf (no flags/type/length wrapper)
     fn encode_value(&self, buf: &mut Vec<u8>);
 
-    /// Decode attribute VALUE from buf, returning (Self, consumed_byte_count)
-    fn decode_value(flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError>
+    /// Decode attribute VALUE from buf, returning (Self, consumed_byte_count).
+    /// `type_code` is the attribute type code from the attribute header.
+    fn decode_value(type_code: u8, flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError>
     where
         Self: Sized;
 
@@ -62,11 +63,10 @@ impl PathAttribute for RawAttribute {
         buf.extend_from_slice(&self.value);
     }
 
-    fn decode_value(flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
+    fn decode_value(type_code: u8, flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
         let value = buf.to_vec();
         let consumed = value.len();
-        // type_code must be set externally after decode
-        Ok((RawAttribute { type_code: 0, flags, value }, consumed))
+        Ok((RawAttribute { type_code, flags, value }, consumed))
     }
 
     fn value_len(&self) -> usize {
@@ -91,19 +91,26 @@ pub(crate) fn decode_attribute(
     buf: &[u8],
 ) -> Result<Box<dyn PathAttribute>, DecodeError> {
     match type_code {
-        1 => Ok(Box::new(decode_impl::<origin::Origin>(flags, buf)?)),
-        2 => Ok(Box::new(decode_impl::<as_path::AsPath>(flags, buf)?)),
-        3 => Ok(Box::new(decode_impl::<next_hop::NextHop>(flags, buf)?)),
-        4 => Ok(Box::new(decode_impl::<multi_exit_disc::MultiExitDisc>(flags, buf)?)),
-        5 => Ok(Box::new(decode_impl::<local_pref::LocalPref>(flags, buf)?)),
-        6 => Ok(Box::new(decode_impl::<atomic_aggregate::AtomicAggregate>(flags, buf)?)),
-        7 => Ok(Box::new(decode_impl::<aggregator::Aggregator>(flags, buf)?)),
-        14 => Ok(Box::new(decode_impl::<mp_reach::MpReachNlri>(flags, buf)?)),
-        15 => Ok(Box::new(decode_impl::<mp_unreach::MpUnreachNlri>(flags, buf)?)),
-        _ => Ok(Box::new(RawAttribute { type_code, flags, value: buf.to_vec() })),
+        1 => Ok(Box::new(decode_impl::<origin::Origin>(type_code, flags, buf)?)),
+        2 => Ok(Box::new(decode_impl::<as_path::AsPath>(type_code, flags, buf)?)),
+        3 => Ok(Box::new(decode_impl::<next_hop::NextHop>(type_code, flags, buf)?)),
+        4 => Ok(Box::new(decode_impl::<multi_exit_disc::MultiExitDisc>(type_code, flags, buf)?)),
+        5 => Ok(Box::new(decode_impl::<local_pref::LocalPref>(type_code, flags, buf)?)),
+        6 => Ok(Box::new(decode_impl::<atomic_aggregate::AtomicAggregate>(type_code, flags, buf)?)),
+        7 => Ok(Box::new(decode_impl::<aggregator::Aggregator>(type_code, flags, buf)?)),
+        14 => Ok(Box::new(decode_impl::<mp_reach::MpReachNlri>(type_code, flags, buf)?)),
+        15 => Ok(Box::new(decode_impl::<mp_unreach::MpUnreachNlri>(type_code, flags, buf)?)),
+        _ => Ok(Box::new(
+            RawAttribute::decode_value(type_code, flags, buf)
+                .map(|(attr, _)| attr)?
+        )),
     }
 }
 
-fn decode_impl<T: PathAttribute>(flags: u8, buf: &[u8]) -> Result<T, DecodeError> {
-    T::decode_value(flags, buf).map(|(val, _)| val)
+fn decode_impl<T: PathAttribute>(
+    type_code: u8,
+    flags: u8,
+    buf: &[u8],
+) -> Result<T, DecodeError> {
+    T::decode_value(type_code, flags, buf).map(|(val, _)| val)
 }

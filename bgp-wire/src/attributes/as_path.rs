@@ -58,7 +58,7 @@ impl PathAttribute for AsPath {
         }
     }
 
-    fn decode_value(_flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
+    fn decode_value(_type_code: u8, _flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
         let mut segments = Vec::new();
         let mut pos = 0;
 

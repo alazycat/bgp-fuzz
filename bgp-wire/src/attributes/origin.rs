@@ -22,7 +22,7 @@ impl PathAttribute for Origin {
         buf.push(self.0);
     }
 
-    fn decode_value(_flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
+    fn decode_value(_type_code: u8, _flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
         if buf.is_empty() {
             return Err(DecodeError::Incomplete {
                 min_required: 1,

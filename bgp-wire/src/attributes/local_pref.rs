@@ -22,7 +22,7 @@ impl PathAttribute for LocalPref {
         buf.extend_from_slice(&self.0.to_be_bytes());
     }
 
-    fn decode_value(_flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
+    fn decode_value(_type_code: u8, _flags: u8, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
         if buf.len() < 4 {
             return Err(DecodeError::Incomplete {
                 min_required: 4,

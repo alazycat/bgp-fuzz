@@ -22,7 +22,7 @@ impl PathAttribute for AtomicAggregate {
         // zero-length value — nothing to encode
     }
 
-    fn decode_value(_flags: u8, _buf: &[u8]) -> Result<(Self, usize), DecodeError> {
+    fn decode_value(_type_code: u8, _flags: u8, _buf: &[u8]) -> Result<(Self, usize), DecodeError> {
         // Zero-length value, consume nothing
         Ok((AtomicAggregate, 0))
     }
