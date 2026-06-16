@@ -1,0 +1,9 @@
+[package]
+name = "bgp-fuzz-gen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bgp-wire = { path = "../bgp-wire" }
+proptest = "1"
+rand = "0.8"
