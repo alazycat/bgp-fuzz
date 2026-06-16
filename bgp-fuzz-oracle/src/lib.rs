@@ -2,10 +2,18 @@ pub mod report;
 pub mod crash;
 pub mod fsm;
 pub mod response;
+pub mod attribute_echo;
+pub mod latency;
+pub mod cap_negotiation;
+pub mod notification_code;
 
 pub use crash::CrashOracle;
 pub use fsm::FsmConsistencyOracle;
 pub use response::ResponseOracle;
+pub use attribute_echo::AttributeEchoOracle;
+pub use latency::LatencyOracle;
+pub use cap_negotiation::CapNegotiationOracle;
+pub use notification_code::NotificationCodeOracle;
 
 use std::fmt::Debug;
 use std::time::Instant;

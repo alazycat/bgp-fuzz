@@ -191,11 +191,18 @@ async fn main() {
 
             let fsm_driver = bgp_fuzz_driver::FsmDriver::new(180);
 
-            use bgp_fuzz_oracle::{CrashOracle, FsmConsistencyOracle, ResponseOracle};
+            use bgp_fuzz_oracle::{
+                CrashOracle, FsmConsistencyOracle, ResponseOracle,
+                AttributeEchoOracle, LatencyOracle, CapNegotiationOracle, NotificationCodeOracle,
+            };
             let oracles: Vec<Box<dyn bgp_fuzz_oracle::Oracle>> = vec![
                 Box::new(CrashOracle::default()),
                 Box::new(FsmConsistencyOracle::default()),
                 Box::new(ResponseOracle::new(30)),
+                Box::new(AttributeEchoOracle::default()),
+                Box::new(LatencyOracle::default()),
+                Box::new(CapNegotiationOracle::default()),
+                Box::new(NotificationCodeOracle::default()),
             ];
 
             let mut session = bgp_fuzz_driver::FuzzSession::new(config, fsm_driver, oracles);
