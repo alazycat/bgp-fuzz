@@ -1,6 +1,7 @@
 pub mod report;
 pub mod crash;
 pub mod fsm;
+pub mod response;
 
 use std::fmt::Debug;
 
