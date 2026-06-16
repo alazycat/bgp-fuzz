@@ -1,4 +1,5 @@
 pub mod report;
+pub mod crash;
 
 use std::fmt::Debug;
 

@@ -13,7 +13,7 @@ pub fn write_report(report: &BugReport, output_dir: &Path) -> io::Result<String>
     let filename = format!("{}.json", report.id);
     let path = output_dir.join(&filename);
     let json = serde_json::to_string_pretty(report)
-        .map_err(|e| io::Error::other(e))?;
+        .map_err(io::Error::other)?;
     fs::write(&path, json)?;
     Ok(path.to_string_lossy().to_string())
 }
