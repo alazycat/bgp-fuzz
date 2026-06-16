@@ -3,6 +3,10 @@ pub mod crash;
 pub mod fsm;
 pub mod response;
 
+pub use crash::CrashOracle;
+pub use fsm::FsmConsistencyOracle;
+pub use response::ResponseOracle;
+
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
