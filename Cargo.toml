@@ -1,0 +1,3 @@
+[workspace]
+members = ["bgp-wire", "bgp-fsm", "bgp-fuzz"]
+resolver = "3"
