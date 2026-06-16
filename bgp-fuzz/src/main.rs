@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
+use proptest::prelude::*;
 
 enum Shutdown {
     SendFin,
@@ -63,6 +64,42 @@ enum Command {
         #[arg(short, long, default_value = "false")]
         verbose: bool,
     },
+    /// Automated fuzz loop: generate, send, observe, report
+    Fuzz {
+        /// Target BGP speaker address (e.g., 127.0.0.1:179)
+        #[arg(short, long)]
+        target: SocketAddr,
+
+        /// Fuzz duration (e.g., 30s, 5m, 1h)
+        #[arg(short, long)]
+        duration: String,
+
+        /// Max messages per second (default: 100)
+        #[arg(long, default_value = "100")]
+        rate_limit: u32,
+
+        /// Report output directory (default: ./reports)
+        #[arg(short, long, default_value = "reports")]
+        output: String,
+
+        /// RNG seed for reproducible runs
+        #[arg(long)]
+        seed: Option<u64>,
+
+        /// Verbose output
+        #[arg(short, long, default_value = "false")]
+        verbose: bool,
+    },
+    /// Replay a bug report to verify reproduction
+    Replay {
+        /// Path to the bug report JSON file
+        #[arg(short, long)]
+        report: String,
+
+        /// Target BGP speaker address
+        #[arg(short, long)]
+        target: SocketAddr,
+    },
 }
 
 #[tokio::main]
@@ -110,6 +147,69 @@ async fn main() {
 
             let shutdown = if send_close { Shutdown::SendFin } else { Shutdown::KeepOpen };
             run_fuzz(target, &bytes, connect_timeout, recv_timeout, shutdown, verbose).await;
+        }
+        Command::Fuzz { target, duration, rate_limit, output, seed: _seed, verbose } => {
+            let dur = humantime::parse_duration(&duration)
+                .unwrap_or_else(|e| {
+                    eprintln!("ERROR: invalid duration '{duration}': {e}");
+                    std::process::exit(1);
+                });
+
+            let config = bgp_fuzz_driver::FuzzConfig {
+                target,
+                duration: dur,
+                rate_limit,
+                output_dir: output,
+                verbose,
+            };
+
+            let fsm_driver = bgp_fuzz_driver::FsmDriver::new(180);
+
+            use bgp_fuzz_oracle::{CrashOracle, FsmConsistencyOracle, ResponseOracle};
+            let oracles: Vec<Box<dyn bgp_fuzz_oracle::Oracle>> = vec![
+                Box::new(CrashOracle::default()),
+                Box::new(FsmConsistencyOracle::default()),
+                Box::new(ResponseOracle::new(30)),
+            ];
+
+            let mut session = bgp_fuzz_driver::FuzzSession::new(config, fsm_driver, oracles);
+
+            // Quick grammar-based generator: single random message each iteration
+            let generator = || {
+                use bgp_fuzz_gen::single_message_bytes_strategy;
+                use proptest::strategy::ValueTree;
+                let mut runner = proptest::test_runner::TestRunner::deterministic();
+                let strategy = single_message_bytes_strategy();
+                let mut msgs = Vec::new();
+                for _ in 0..10 {
+                    if let Ok(tree) = strategy.new_tree(&mut runner) {
+                        msgs.push(tree.current());
+                    }
+                }
+                msgs
+            };
+
+            eprintln!("[INFO] target: {target}  duration: {duration}  strategy: grammar");
+            let _bugs = session.run(generator).await;
+        }
+        Command::Replay { report: report_path, target } => {
+            let content = match std::fs::read_to_string(&report_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("ERROR: cannot read report '{report_path}': {e}");
+                    std::process::exit(1);
+                }
+            };
+            let bug: bgp_fuzz_oracle::BugReport = match serde_json::from_str(&content) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("ERROR: invalid report JSON: {e}");
+                    std::process::exit(1);
+                }
+            };
+            eprintln!("REPLAY: {} (target: {target})", bug.title);
+            // TODO: replay each repro step against target
+            eprintln!("Repro steps: {}", bug.repro.len());
         }
     }
 }

@@ -6,5 +6,11 @@ edition = "2024"
 [dependencies]
 bgp-wire = { path = "../bgp-wire" }
 bgp-fsm = { path = "../bgp-fsm" }
+bgp-fuzz-driver = { path = "../bgp-fuzz-driver" }
+bgp-fuzz-gen = { path = "../bgp-fuzz-gen" }
+bgp-fuzz-oracle = { path = "../bgp-fuzz-oracle" }
+proptest = "1"
+serde_json = "1"
 clap = { version = "4", features = ["derive"] }
+humantime = "2"
 tokio = { version = "1", features = ["net", "time", "io-util", "macros", "rt-multi-thread"] }
