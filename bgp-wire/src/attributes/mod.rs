@@ -83,6 +83,7 @@ pub mod atomic_aggregate;
 pub mod aggregator;
 pub mod mp_reach;
 pub mod mp_unreach;
+pub mod capability;
 
 /// Decode a path attribute from its type_code, flags, and value bytes.
 pub(crate) fn decode_attribute(

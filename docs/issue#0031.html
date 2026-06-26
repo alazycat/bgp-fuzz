@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Implementation Notes — Issue #0031</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #FAF9F6;
+      color: #1a1a1a;
+      padding: 2.5rem 2rem;
+      line-height: 1.7;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 1.375rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .meta { color: #8B8680; font-size: 0.8125rem; margin-bottom: 2rem; }
+    h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.375rem;
+      border-bottom: 1px solid #E8E4DE;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.design { background: #5B8A72; }
+    .dot.deviation { background: #D97757; }
+    .dot.tradeoff { background: #4A6FA5; }
+    .dot.question { background: #D4A843; }
+    .item {
+      background: #FFFFFF;
+      border: 1px solid #E8E4DE;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .item h3 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.375rem; }
+    .item p { font-size: 0.8125rem; color: #4A4540; margin-bottom: 0.375rem; }
+    .label {
+      display: inline-block;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      padding: 0.125rem 0.5rem;
+      border-radius: 4px;
+      margin-right: 0.375rem;
+    }
+    .label-design { background: #F5F8F6; color: #5B8A72; border: 1px solid #5B8A72; }
+    .label-deviation { background: #FFF5F0; color: #D97757; border: 1px solid #D97757; }
+    .label-tradeoff { background: #F0F4F8; color: #4A6FA5; border: 1px solid #4A6FA5; }
+    .label-question { background: #FDF8F0; color: #D4A843; border: 1px solid #D4A843; }
+    .none { color: #B0AAA4; font-style: italic; font-size: 0.8125rem; }
+    .footer { text-align: center; margin-top: 2.5rem; color: #B0AAA4; font-size: 0.6875rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Implementation Notes</h1>
+    <p class="meta">Issue <a href="https://github.com/alazycat/bgp-fuzz/issues/31">#31</a> &mdash; BGP Capability Structured Codec (RFC 5492) &mdash; 2026-06-26</p>
+
+    <h2><span class="dot design"></span> Design Decisions</h2>
+
+    <div class="item">
+      <h3><span class="label label-design">Decision</span> MultiProtocol capability stores afi/safi but not reserved byte</h3>
+      <p><strong>Ambiguity:</strong> The MP capability value is AFI(2) + Reserved(1) + SAFI(1), but the spec only mentions <code>{afi, safi}</code> as fields.</p>
+      <p><strong>Choice:</strong> Expose only afi and safi as named fields. The reserved byte is written as 0 on encode and silently skipped on decode.</p>
+      <p><strong>Rationale:</strong> The reserved byte is always 0 per RFC 4760 and carries no semantic information. Keeping it out of the public API avoids noise while the wire format remains correct.</p>
+    </div>
+
+    <div class="item">
+      <h3><span class="label label-design">Decision</span> GracefulRestart families stored as raw Vec&lt;u8&gt;</h3>
+      <p><strong>Ambiguity:</strong> Each family entry is AFI(2)+SAFI(1)+Flags(1)=4 bytes, but the spec didn't specify whether to parse them into structs.</p>
+      <p><strong>Choice:</strong> Store as opaque <code>Vec&lt;u8&gt;</code> — raw bytes.</p>
+      <p><strong>Rationale:</strong> Consistent with the project's zero-validation fuzzing philosophy. Structured parsing would require validation that the fuzzer needs to bypass. Callers who need structured families can parse the bytes themselves.</p>
+    </div>
+
+    <div class="item">
+      <h3><span class="label label-design">Decision</span> encode truncates value bytes to declared_len</h3>
+      <p><strong>Ambiguity:</strong> When <code>declared_len</code> is smaller than the structured value, should encode write fewer bytes or all bytes?</p>
+      <p><strong>Choice:</strong> Truncate to declared_len. Decode consumes exactly <code>2 + declared_len</code> bytes for position tracking.</p>
+      <p><strong>Rationale:</strong> Encode and decode must agree on byte boundaries for capability sequence round-trips through CapabilitiesOptParam. Without truncation, a capability with mismatched declared_len would corrupt the offset for the next capability in the sequence.</p>
+    </div>
+
+    <h2><span class="dot deviation"></span> Deviations</h2>
+    <p class="none">None — implementation follows the spec as written. All five capability types are supported, declared_len is preserved, and the wire format matches RFC 5492.</p>
+
+    <h2><span class="dot tradeoff"></span> Tradeoffs</h2>
+
+    <div class="item">
+      <h3><span class="label label-tradeoff">Tradeoff</span> Field defaults vs. Incomplete error on short value</h3>
+      <p><strong>Alternatives:</strong> (A) Default to 0/empty when value bytes are too short — chosen; (B) Return <code>DecodeError::Incomplete</code>.</p>
+      <p><strong>Why A:</strong> The fuzzing codec must never reject input. Defaulting to 0 preserves the declared_len and type_code while avoiding panics. The caller can detect the truncation by comparing declared_len against the expected value size for that type.</p>
+    </div>
+
+    <h2><span class="dot question"></span> Open Questions</h2>
+    <p class="none">None — all acceptance criteria met with passing tests and clean clippy.</p>
+
+    <p class="footer">Generated by goal-workflow /note-it</p>
+  </div>
+</body>
+</html>
