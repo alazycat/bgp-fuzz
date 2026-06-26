@@ -25,6 +25,7 @@ pub use error::DecodeError;
 pub use types::MessageHeader;
 pub use nlri::NlriPrefix;
 pub use open::{OpenMessage, OptionalParameter};
+pub use attributes::capability::{Capability, CapabilitiesOptParam};
 pub use update::UpdateMessage;
 pub use keepalive::KeepaliveMessage;
 pub use notification::NotificationMessage;

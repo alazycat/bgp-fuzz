@@ -1,4 +1,5 @@
 use crate::{DecodeError, MessageHeader, WireDecode, WireEncode};
+use crate::attributes::capability::{Capability, CapabilitiesOptParam};
 
 /// OPEN Message (RFC 4271 §4.2)
 ///
@@ -37,6 +38,28 @@ impl OpenMessage {
     /// Create a new builder for an OpenMessage
     pub fn builder() -> OpenBuilder {
         OpenBuilder::default()
+    }
+
+    /// Parse capabilities from the type=2 Optional Parameter.
+    pub fn capabilities(&self) -> Vec<Capability> {
+        for param in &self.optional_parameters {
+            if param.param_type == Capability::OPT_PARAM_TYPE {
+                return CapabilitiesOptParam::from_optional_parameter(param).capabilities;
+            }
+        }
+        vec![]
+    }
+
+    /// Set capabilities as a type=2 Optional Parameter, replacing any existing one.
+    pub fn set_capabilities(&mut self, capabilities: Vec<Capability>) {
+        let caps = CapabilitiesOptParam { capabilities };
+        let new_param = caps.to_optional_parameter();
+        // Replace existing type=2 param if present
+        if let Some(pos) = self.optional_parameters.iter().position(|p| p.param_type == Capability::OPT_PARAM_TYPE) {
+            self.optional_parameters[pos] = new_param;
+        } else {
+            self.optional_parameters.push(new_param);
+        }
     }
 }
 
