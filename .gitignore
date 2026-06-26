@@ -4,3 +4,6 @@ rfc4760.txt
 
 # Planning documents
 tasks/
+
+# loop-it automation state
+.loop-state.json
