@@ -141,6 +141,7 @@ fn default_transitions() -> HashMap<TransitionKey, TransitionEntry> {
     table.insert((Idle, BgpKeepalive), (Idle, Illegal));
     table.insert((Idle, BgpUpdate), (Idle, Illegal));
     table.insert((Idle, BgpNotification), (Idle, Illegal));
+    table.insert((Idle, BgpRouteRefresh), (Idle, Illegal));
     // TCP events in Idle are ignored
     table.insert((Idle, TcpConnectionConfirmed), (Idle, Illegal));
     // TcpConnectionFails in Idle — stays in Idle
@@ -154,16 +155,18 @@ fn default_transitions() -> HashMap<TransitionKey, TransitionEntry> {
     table.insert((Connect, ConnectRetryTimerExpires), (Connect, Legal));
     // ManualStop → Idle
     table.insert((Connect, ManualStop), (Idle, Legal));
-    // Any other event in Connect
+    // Any message event in Connect is illegal
     table.insert((Connect, AutomaticStart), (Connect, Unspecified));
     table.insert((Connect, BgpOpen), (Connect, Illegal));
     table.insert((Connect, BgpKeepalive), (Connect, Illegal));
+    table.insert((Connect, BgpRouteRefresh), (Connect, Illegal));
 
     table.insert((Active, TcpConnectionConfirmed), (OpenSent, Legal));
     table.insert((Active, TcpConnectionFails), (Idle, Legal));
     table.insert((Active, ConnectRetryTimerExpires), (Connect, Legal));
     table.insert((Active, ManualStop), (Idle, Legal));
     table.insert((Active, BgpOpen), (Active, Illegal));
+    table.insert((Active, BgpRouteRefresh), (Active, Illegal));
 
     // BgpOpen with correct parameters → OpenConfirm
     table.insert((OpenSent, BgpOpen), (OpenConfirm, Legal));
@@ -179,6 +182,7 @@ fn default_transitions() -> HashMap<TransitionKey, TransitionEntry> {
     table.insert((OpenSent, BgpKeepalive), (OpenSent, Illegal));
     table.insert((OpenSent, BgpUpdate), (OpenSent, Illegal));
     table.insert((OpenSent, BgpNotification), (OpenSent, Illegal));
+    table.insert((OpenSent, BgpRouteRefresh), (OpenSent, Illegal));
     // ManualStop → Idle
     table.insert((OpenSent, ManualStop), (Idle, Legal));
 
@@ -200,6 +204,7 @@ fn default_transitions() -> HashMap<TransitionKey, TransitionEntry> {
     table.insert((OpenConfirm, BgpOpen), (OpenConfirm, Illegal));
     // UPDATE in OpenConfirm is illegal (must be Established first)
     table.insert((OpenConfirm, BgpUpdate), (OpenConfirm, Illegal));
+    table.insert((OpenConfirm, BgpRouteRefresh), (OpenConfirm, Illegal));
 
     // BgpUpdate → Established (normal update processing)
     table.insert((Established, BgpUpdate), (Established, Legal));
@@ -219,6 +224,8 @@ fn default_transitions() -> HashMap<TransitionKey, TransitionEntry> {
     table.insert((Established, ManualStop), (Idle, Legal));
     // OPEN in Established is illegal
     table.insert((Established, BgpOpen), (Established, Illegal));
+    // ROUTE-REFRESH in Established is legal (RFC 2918)
+    table.insert((Established, BgpRouteRefresh), (Established, Legal));
 
     table.insert((OpenSent, TcpConnectionFails), (Active, Legal));
 

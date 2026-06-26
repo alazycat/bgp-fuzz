@@ -15,6 +15,8 @@ pub enum EventType {
     BgpNotification,
     /// Received OPEN with unsupported version
     BgpOpenVersionError,
+    /// Received ROUTE-REFRESH message (RFC 2918)
+    BgpRouteRefresh,
     /// Received a malformed BGP message
     BgpMsgError,
 }
