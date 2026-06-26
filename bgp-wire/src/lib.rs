@@ -7,6 +7,7 @@ pub mod open;
 pub mod update;
 pub mod keepalive;
 pub mod notification;
+pub mod route_refresh;
 
 /// BGP message type enumeration (RFC 4271 §4)
 #[derive(Debug, Clone)]
@@ -15,7 +16,8 @@ pub enum BgpMessage {
     Update(update::UpdateMessage),
     Keepalive(keepalive::KeepaliveMessage),
     Notification(notification::NotificationMessage),
-    /// Unknown/raw message type (including RFC 2918 Route Refresh type 5)
+    RouteRefresh(route_refresh::RouteRefreshMessage),
+    /// Unknown/raw message type
     Raw { type_code: u8, data: Vec<u8> },
 }
 
@@ -26,6 +28,7 @@ pub use open::{OpenMessage, OptionalParameter};
 pub use update::UpdateMessage;
 pub use keepalive::KeepaliveMessage;
 pub use notification::NotificationMessage;
+pub use route_refresh::RouteRefreshMessage;
 
 impl WireEncode for BgpMessage {
     fn encode(&self, buf: &mut Vec<u8>) {
@@ -34,6 +37,7 @@ impl WireEncode for BgpMessage {
             BgpMessage::Update(m) => m.encode(buf),
             BgpMessage::Keepalive(m) => m.encode(buf),
             BgpMessage::Notification(m) => m.encode(buf),
+            BgpMessage::RouteRefresh(m) => m.encode(buf),
             BgpMessage::Raw { type_code, data } => {
                 let header = MessageHeader {
                     marker: [MessageHeader::MARKER; MessageHeader::MARKER_LEN],
@@ -66,6 +70,10 @@ impl WireDecode for BgpMessage {
             MessageHeader::TYPE_KEEPALIVE => {
                 let (msg, n) = keepalive::KeepaliveMessage::decode(buf)?;
                 Ok((BgpMessage::Keepalive(msg), n))
+            }
+            MessageHeader::TYPE_ROUTE_REFRESH => {
+                let (msg, n) = route_refresh::RouteRefreshMessage::decode(buf)?;
+                Ok((BgpMessage::RouteRefresh(msg), n))
             }
             unknown_code => {
                 let data_end = header.length as usize;

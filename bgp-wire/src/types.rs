@@ -26,4 +26,5 @@ impl MessageHeader {
     pub const TYPE_UPDATE: u8 = 2;
     pub const TYPE_NOTIFICATION: u8 = 3;
     pub const TYPE_KEEPALIVE: u8 = 4;
+    pub const TYPE_ROUTE_REFRESH: u8 = 5;
 }
