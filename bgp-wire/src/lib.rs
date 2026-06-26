@@ -31,6 +31,60 @@ pub use keepalive::KeepaliveMessage;
 pub use notification::NotificationMessage;
 pub use route_refresh::RouteRefreshMessage;
 
+impl BgpMessage {
+    /// Return the BGP message type code for this variant.
+    pub fn type_code(&self) -> u8 {
+        match self {
+            BgpMessage::Open(_) => MessageHeader::TYPE_OPEN,
+            BgpMessage::Update(_) => MessageHeader::TYPE_UPDATE,
+            BgpMessage::Notification(_) => MessageHeader::TYPE_NOTIFICATION,
+            BgpMessage::Keepalive(_) => MessageHeader::TYPE_KEEPALIVE,
+            BgpMessage::RouteRefresh(_) => MessageHeader::TYPE_ROUTE_REFRESH,
+            BgpMessage::Raw { type_code, .. } => *type_code,
+        }
+    }
+
+    /// Decode a BGP message given a pre-parsed header and the full message buffer.
+    pub fn decode_with_header(header: &MessageHeader, buf: &[u8]) -> Result<(Self, usize), DecodeError> {
+        match header.type_code {
+            MessageHeader::TYPE_OPEN => {
+                let (msg, n) = open::OpenMessage::decode(buf)?;
+                Ok((BgpMessage::Open(msg), n))
+            }
+            MessageHeader::TYPE_UPDATE => {
+                let (msg, n) = update::UpdateMessage::decode(buf)?;
+                Ok((BgpMessage::Update(msg), n))
+            }
+            MessageHeader::TYPE_NOTIFICATION => {
+                let (msg, n) = notification::NotificationMessage::decode(buf)?;
+                Ok((BgpMessage::Notification(msg), n))
+            }
+            MessageHeader::TYPE_KEEPALIVE => {
+                let (msg, n) = keepalive::KeepaliveMessage::decode(buf)?;
+                Ok((BgpMessage::Keepalive(msg), n))
+            }
+            MessageHeader::TYPE_ROUTE_REFRESH => {
+                // RFC 2918 body is 4 bytes (afi + reserved + safi).
+                // If body is shorter, fall back to Raw.
+                let body_len = (header.length as usize).saturating_sub(MessageHeader::LEN);
+                if body_len >= 4 && buf.len() >= route_refresh::RouteRefreshMessage::MIN_LEN {
+                    let (msg, n) = route_refresh::RouteRefreshMessage::decode(buf)?;
+                    Ok((BgpMessage::RouteRefresh(msg), n))
+                } else {
+                    let data_end = header.length as usize;
+                    let data = buf[MessageHeader::LEN..data_end.min(buf.len())].to_vec();
+                    Ok((BgpMessage::Raw { type_code: MessageHeader::TYPE_ROUTE_REFRESH, data }, data_end.min(buf.len())))
+                }
+            }
+            unknown_code => {
+                let data_end = header.length as usize;
+                let data = buf[MessageHeader::LEN..data_end.min(buf.len())].to_vec();
+                Ok((BgpMessage::Raw { type_code: unknown_code, data }, data_end.min(buf.len())))
+            }
+        }
+    }
+}
+
 impl WireEncode for BgpMessage {
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
@@ -55,33 +109,7 @@ impl WireEncode for BgpMessage {
 impl WireDecode for BgpMessage {
     fn decode(buf: &[u8]) -> Result<(Self, usize), DecodeError> {
         let (header, _) = MessageHeader::decode(buf)?;
-        match header.type_code {
-            MessageHeader::TYPE_OPEN => {
-                let (msg, n) = open::OpenMessage::decode(buf)?;
-                Ok((BgpMessage::Open(msg), n))
-            }
-            MessageHeader::TYPE_UPDATE => {
-                let (msg, n) = update::UpdateMessage::decode(buf)?;
-                Ok((BgpMessage::Update(msg), n))
-            }
-            MessageHeader::TYPE_NOTIFICATION => {
-                let (msg, n) = notification::NotificationMessage::decode(buf)?;
-                Ok((BgpMessage::Notification(msg), n))
-            }
-            MessageHeader::TYPE_KEEPALIVE => {
-                let (msg, n) = keepalive::KeepaliveMessage::decode(buf)?;
-                Ok((BgpMessage::Keepalive(msg), n))
-            }
-            MessageHeader::TYPE_ROUTE_REFRESH => {
-                let (msg, n) = route_refresh::RouteRefreshMessage::decode(buf)?;
-                Ok((BgpMessage::RouteRefresh(msg), n))
-            }
-            unknown_code => {
-                let data_end = header.length as usize;
-                let data = buf[MessageHeader::LEN..data_end.min(buf.len())].to_vec();
-                Ok((BgpMessage::Raw { type_code: unknown_code, data }, data_end.min(buf.len())))
-            }
-        }
+        Self::decode_with_header(&header, buf)
     }
 }
 
