@@ -287,6 +287,61 @@ fn full_session_establishment_flow() {
     assert_eq!(l, Legality::Legal);
 }
 
+// --- RouteRefresh (RFC 2918) ---
+
+#[test]
+fn established_route_refresh_is_legal() {
+    let mut fsm = ShadowFsm::new(180);
+    fsm.set_state(State::Established);
+    let (s, l) = fsm.step(&msg(EventType::BgpRouteRefresh));
+    assert_eq!(s, State::Established);
+    assert_eq!(l, Legality::Legal);
+}
+
+#[test]
+fn opensent_route_refresh_is_illegal() {
+    let mut fsm = ShadowFsm::new(180);
+    fsm.set_state(State::OpenSent);
+    let (s, l) = fsm.step(&msg(EventType::BgpRouteRefresh));
+    assert_eq!(s, State::OpenSent);
+    assert_eq!(l, Legality::Illegal);
+}
+
+#[test]
+fn openconfirm_route_refresh_is_illegal() {
+    let mut fsm = ShadowFsm::new(180);
+    fsm.set_state(State::OpenConfirm);
+    let (s, l) = fsm.step(&msg(EventType::BgpRouteRefresh));
+    assert_eq!(s, State::OpenConfirm);
+    assert_eq!(l, Legality::Illegal);
+}
+
+#[test]
+fn connect_route_refresh_is_illegal() {
+    let mut fsm = ShadowFsm::new(180);
+    fsm.set_state(State::Connect);
+    let (s, l) = fsm.step(&msg(EventType::BgpRouteRefresh));
+    assert_eq!(s, State::Connect);
+    assert_eq!(l, Legality::Illegal);
+}
+
+#[test]
+fn active_route_refresh_is_illegal() {
+    let mut fsm = ShadowFsm::new(180);
+    fsm.set_state(State::Active);
+    let (s, l) = fsm.step(&msg(EventType::BgpRouteRefresh));
+    assert_eq!(s, State::Active);
+    assert_eq!(l, Legality::Illegal);
+}
+
+#[test]
+fn idle_route_refresh_is_illegal() {
+    let mut fsm = ShadowFsm::new(180);
+    let (s, l) = fsm.step(&msg(EventType::BgpRouteRefresh));
+    assert_eq!(s, State::Idle);
+    assert_eq!(l, Legality::Illegal);
+}
+
 #[test]
 fn tick_seconds_decrements_timers() {
     let mut fsm = ShadowFsm::new(180);

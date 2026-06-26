@@ -74,7 +74,7 @@ fn classify_message(bytes: &[u8]) -> EventType {
             BgpMessage::Update(_) => EventType::BgpUpdate,
             BgpMessage::Keepalive(_) => EventType::BgpKeepalive,
             BgpMessage::Notification(_) => EventType::BgpNotification,
-            BgpMessage::RouteRefresh(_) => EventType::BgpMsgError,
+            BgpMessage::RouteRefresh(_) => EventType::BgpRouteRefresh,
             BgpMessage::Raw { .. } => EventType::BgpMsgError,
         }
     } else if bytes.len() >= 19 {
