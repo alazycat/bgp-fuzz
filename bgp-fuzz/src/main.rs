@@ -2,6 +2,7 @@ use std::io::Write as _;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use bgp_wire::WireDecode;
 use clap::{Parser, Subcommand};
 
 enum Shutdown {
@@ -167,6 +168,9 @@ async fn main() {
             if verbose {
                 eprintln!("[VERBOSE] target: {target}");
                 eprintln!("[VERBOSE] payload: {} bytes", bytes.len());
+                if let Ok((msg, _)) = bgp_wire::BgpMessage::decode(&bytes) {
+                    eprintln!("[VERBOSE] message type: {}", message_type_label(&msg));
+                }
                 dump_hex(&bytes);
             }
 
@@ -363,6 +367,17 @@ async fn send_payload(stream: &mut tokio::net::TcpStream, payload: &[u8]) {
             eprintln!("ERROR: send failed: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+fn message_type_label(msg: &bgp_wire::BgpMessage) -> String {
+    match msg {
+        bgp_wire::BgpMessage::Open(_) => "OPEN".into(),
+        bgp_wire::BgpMessage::Update(_) => "UPDATE".into(),
+        bgp_wire::BgpMessage::Keepalive(_) => "KEEPALIVE".into(),
+        bgp_wire::BgpMessage::Notification(_) => "NOTIFICATION".into(),
+        bgp_wire::BgpMessage::RouteRefresh(_) => "ROUTE-REFRESH".into(),
+        bgp_wire::BgpMessage::Raw { type_code, .. } => format!("Raw({type_code})"),
     }
 }
 
